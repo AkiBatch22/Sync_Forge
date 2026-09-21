@@ -9,7 +9,7 @@ gem "rails", "~> 8.1.3", ">= 8.1.3.1"
 gem "pg", "~> 1.1"
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 5.0"
-gem "redis", "~> 5.0"
+gem "redis", "~> 6.0"
 gem "sidekiq", "~> 8.0"
 gem "faker", require: false
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
