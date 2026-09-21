@@ -1,7 +1,7 @@
 source "https://rubygems.org"
 
 # Active Support 8.1.3.1 still uses the JSON 2.x parse calling convention.
-gem "json", "< 3"
+gem "json", "< 4"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8.1.3", ">= 8.1.3.1"
