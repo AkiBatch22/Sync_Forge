@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: syncforge
+      POSTGRES_PASSWORD: syncforge
+      POSTGRES_DB: syncforge_development
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syncforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres18_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  migrate:
+    build:
+      context: .
+      target: development
+    environment: &app_environment
+      DATABASE_URL: postgres://syncforge:syncforge@postgres:5432/syncforge_development
+      REDIS_URL: redis://redis:6379/0
+      ERP_BASE_URL: http://web:3000
+      CRM_WEBHOOK_SECRET: development-secret
+      RAILS_ENV: development
+    command: bundle exec rails db:create db:migrate
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    build:
+      context: .
+      target: development
+    environment: *app_environment
+    command: bundle exec rails server -b 0.0.0.0 -p 3000
+    ports: ["3000:3000"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    build:
+      context: .
+      target: development
+    environment: *app_environment
+    command: bundle exec sidekiq -q syncs -q default
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+volumes:
+  postgres18_data:
+  redis_data:

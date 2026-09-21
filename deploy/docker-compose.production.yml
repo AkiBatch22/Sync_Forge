@@ -1,0 +1,68 @@
+name: syncforge
+
+x-app-environment: &app_environment
+  RAILS_ENV: production
+  RAILS_LOG_LEVEL: ${RAILS_LOG_LEVEL:-info}
+  DATABASE_URL: postgresql://syncforge:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/syncforge_production
+  REDIS_URL: redis://redis:6379/0
+  ERP_BASE_URL: http://web:3000
+  SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}
+  CRM_WEBHOOK_SECRET: ${CRM_WEBHOOK_SECRET:?CRM_WEBHOOK_SECRET is required}
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: syncforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: syncforge_production
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syncforge -d syncforge_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  migrate:
+    image: ${SYNCFORGE_IMAGE:?SYNCFORGE_IMAGE is required}
+    environment: *app_environment
+    command: bundle exec rails db:migrate
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    image: ${SYNCFORGE_IMAGE}
+    restart: unless-stopped
+    environment: *app_environment
+    command: bundle exec rails server -b 0.0.0.0 -p 3000
+    ports: ["${APP_PORT:-3000}:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    image: ${SYNCFORGE_IMAGE}
+    restart: unless-stopped
+    environment: *app_environment
+    command: bundle exec sidekiq -q syncs -q default
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+volumes:
+  postgres_data:
+  redis_data:
